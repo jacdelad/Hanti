@@ -2,8 +2,8 @@
 UsePNGImageDecoder()
 UseOGGSoundDecoder()
 InitSound()
-Define Close.a,Event,Direction.b=1,Dir.b=1,Angle.w,Factor.a=2,A,AX,X,Y,SX,KBSPace.a,KBB.a,KBHelp.a,MenuMode.a=0,TitleZoom.a=255,TitleTransparency.a,Temp$,R,OMX,OMY,Help.b=-1,MenuSound.a
-Global Dim Rocks.w(0),Level.a=1,Score.q,RockPos=0
+Define Close.a,Event,Direction.b=1,Dir.b=1,Angle.w,Factor.a=2,A,AX,X,Y,SX,KBSPace.a,KBB.a,KBHelp.a,MenuMode.a=0,TitleZoom.a=255,TitleTransparency.a,Temp$,R,OMX,OMY,Help.b=-1,MenuSound.a,OX,OY,CX,CY
+Global Collision.a,Dim Rocks.w(0),Level.a=1,Score.q,RockPos=0
 
 Enumeration Sprites
   #S_Hanti
@@ -23,6 +23,9 @@ Enumeration Images
   #I_Rock
   #I_Background
   #I_TempBackground
+  #I_Collision
+  #I_Left
+  #I_Right
 EndEnumeration
 Enumeration Sounds
   #So_Click
@@ -32,7 +35,7 @@ EndEnumeration
 
 Procedure RebuildSprites()
   Protected A
-  StartDrawing(SpriteOutput(#S_Left))
+  StartDrawing(ImageOutput(#I_Left))
   DrawingMode(#PB_2DDrawing_AllChannels)
   For A=ArraySize(Rocks()) To 1 Step -1
     DrawImage(ImageID(#I_Rock),0,200*(A-1))
@@ -41,8 +44,12 @@ Procedure RebuildSprites()
   Next    
   FillArea(OutputWidth()-1,0,RGB(0,0,255),RGB(0,0,0))
   StopDrawing()
+  StartDrawing(SpriteOutput(#S_Left))
+  DrawingMode(#PB_2DDrawing_AllChannels)
+  DrawImage(ImageID(#I_Left),0,0)
+  StopDrawing()
   
-  StartDrawing(SpriteOutput(#S_Right))
+  StartDrawing(ImageOutput(#I_Right))
   DrawingMode(#PB_2DDrawing_AllChannels)
   For A=ArraySize(Rocks()) To 1 Step -1
     DrawImage(ImageID(#I_Rock),0,200*(A-1))
@@ -51,6 +58,16 @@ Procedure RebuildSprites()
   Next    
   FillArea(0,0,RGBA(0,0,255,255),RGB(0,0,0))
   StopDrawing()
+  StartDrawing(SpriteOutput(#S_Right))
+  DrawingMode(#PB_2DDrawing_AllChannels)
+  DrawImage(ImageID(#I_Right),0,0)
+  StopDrawing()
+EndProcedure
+
+Procedure CollisionFilter(x,y,S.l,D.l)
+  If S<>#Black And D<>#Black|$FF000000
+    Collision=#True
+  EndIf
 EndProcedure
 
 Procedure RebuildScoreSprite()
@@ -77,6 +94,9 @@ If OpenWindow(0,300,300,600,800,"Hanti",#PB_Window_SystemMenu)
     CatchSound(#So_Hanti,?Hanti,?Hanti_End-?Hanti)
     CatchSound(#So_Click,?Click,?Hanti-?Click)
     CatchSound(#So_Explode,?Hit,?Click-?Hit)
+    CreateImage(#I_Collision,DesktopScaledX(WindowWidth(0)),DesktopScaledY(WindowHeight(0)),32)
+    CreateImage(#I_Left,DesktopScaledX(WindowWidth(0))/4,DesktopScaledY(WindowHeight(0))+400,32)
+    CreateImage(#I_Right,DesktopScaledX(WindowWidth(0))/4,DesktopScaledY(WindowHeight(0))+400,32)
     
     CreateSprite(#S_Score,DesktopScaledX(WindowWidth(0)),DesktopScaledY(40),#PB_Sprite_AlphaBlending)
     LoadFont(#F_Score,"Courier New",24,#PB_Font_Bold|#PB_Font_HighQuality)
@@ -236,15 +256,36 @@ If OpenWindow(0,300,300,600,800,"Hanti",#PB_Window_SystemMenu)
         Case 1
           OMX=X+AX*Cos(Radian(Angle))
           OMY=Y+AX*Sin(Radian(Angle))
-          If OMY>DesktopScaledY(WindowHeight(0)) Or OMY<0; Or OMX>DesktopScaledX(WindowWidth(0)) Or OMX<0
+          
+          Collision=#False
+          ClearScreen(0)
+          DisplayTransparentSprite(#S_Hanti,X,Y)
+          StartDrawing(ScreenOutput())
+          GrabDrawingImage(#I_Collision,0,0,OutputWidth(),OutputHeight())
+          StopDrawing()
+          StartDrawing(ImageOutput(#I_Collision))
+          CustomFilterCallback(@CollisionFilter())
+          DrawingMode(#PB_2DDrawing_CustomFilter)
+          OX=X+SpriteWidth(#S_Hanti)/2
+          OY=Y+SpriteHeight(#S_Hanti)/2
+          CX=OX+AX*Cos(Radian(Angle))
+          CY=OY+AX*Sin(Radian(Angle))
+          If CX<OX:Swap CX,OX:EndIf
+          If CY<OY:Swap CY,OY:EndIf
+          OX-R:OY-R:CX+R:CY+R
+          ClipOutput(OX,OY,CX-OX,CY-OY)
+          DrawImage(ImageID(#I_Left),0,SX)
+          If Not Collision
+            DrawImage(ImageID(#I_Right),DesktopScaledX(WindowWidth(0))-SpriteWidth(#S_Right),SX)
+          EndIf
+          StopDrawing()
+          
+          If Collision Or OMY>DesktopScaledY(WindowHeight(0)) Or OMY<0; Or OMX>DesktopScaledX(WindowWidth(0)) Or OMX<0
             PlaySound(#So_Explode)
             MenuMode=0
             TitleZoom=255
             TitleTransparency=0
             Help=-1
-            StartDrawing(ScreenOutput())
-            GrabDrawingImage(#I_TempBackground,0,0,OutputWidth(),OutputHeight())
-            StopDrawing()
           Else
             If KeyboardPushed(#PB_Key_Space) And Not KBSpace
               Direction=-1*Direction
@@ -280,6 +321,9 @@ If OpenWindow(0,300,300,600,800,"Hanti",#PB_Window_SystemMenu)
             RebuildScoreSprite()
             DisplayTransparentSprite(#S_Score,0,0)
             FlipBuffers()
+            StartDrawing(ScreenOutput())
+            GrabDrawingImage(#I_TempBackground,0,0,OutputWidth(),OutputHeight())
+            StopDrawing()
             SX+Factor
             If SX>-200
               For A=ArraySize(Rocks())-2 To 0 Step -1
@@ -302,9 +346,9 @@ EndIf
 XIncludeFile "Resources.pbi"
 
 ; IDE Options = PureBasic 6.21 Beta 2 (Windows - x64)
-; CursorPosition = 180
-; FirstLine = 147
-; Folding = ---
+; CursorPosition = 271
+; FirstLine = 195
+; Folding = 1L6
 ; Optimizer
 ; EnableAsm
 ; EnableThread
